@@ -127,12 +127,16 @@ export function createMockMooveServer(opts: SandboxOptions = {}) {
     return res.status(200).json({ id, url: link.url });
   });
 
+  // Real page size is fixed at 10 and not a request parameter, newest first
+  // (confirmed: docs.moove.xyz/api-reference/pagination).
+  const PAGE_SIZE = 10;
+
   app.get("/v1/payment-link", (req: Request, res: Response) => {
     const status = req.query.status as MoovePaymentLink["status"] | undefined;
     const offset = req.query.offset ? Number(req.query.offset) : 0;
-    const limit = 20;
+    const limit = PAGE_SIZE;
 
-    let all = Array.from(links.values()).sort((a, b) => a.dateCreated.localeCompare(b.dateCreated));
+    let all = Array.from(links.values()).sort((a, b) => b.dateCreated.localeCompare(a.dateCreated));
     if (status) all = all.filter((l) => l.status === status);
 
     const page = all.slice(offset, offset + limit);

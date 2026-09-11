@@ -23,7 +23,7 @@ Moove's own announcement says: *"Now your AI agents can move money for you... Ju
 
 ```bash
 npm install
-npm test               # 14 automated tests, all passing
+npm test               # 21 automated tests, all passing
 npm run build           # tsc — should complete with no errors
 npm run demo:server     # starts the sandbox Moove API (port 4501) + a paid demo route (port 4500)
 # in a second terminal:
@@ -58,9 +58,13 @@ See `src/__tests__/mcp.test.ts` for a full example of driving all three over the
 - **There is no settlement timestamp field** in the response schema (`PaymentLinkData` has a status flag and no `settledAt`/`completedAt`). Relay's finality check therefore measures from the moment *this client first observes* `status: "completed"`, not from Moove's own record of when it happened — documented in `mooveClient.ts`. Any lag between real settlement and first observation only makes the check more conservative, never less.
 - Auth is `X-API-Key` header, key format `mk_live_...`, obtained via a self-serve dashboard (`moove.xyz/dashboard/api-keys`, part of Moove Business, launched 10 Sept 2026) and scoped to `payment_link:create` / `payment_link:read`. No key-minting endpoint exists — keys can't issue other keys.
 - The API is explicitly documented as "live and serving production traffic" with **no sandbox/test mode** — confirmed even more directly than at initial research (this is why `src/sandbox/mockMooveServer.ts` exists at all).
-- Only the **Moove Receive Agent** is live. Send/Swap/Ramp agents are "announced and appear disabled in the picker" (Moove's own FAQ wording, still true as of the last check).
-- No official SDK exists ("Not yet. The API is a plain HTTP API and works from any language today" — Moove's FAQ, still true).
+- Only the **Moove Receive Agent** is live. Send/Swap/Ramp agents are "announced and appear disabled in the picker" (Moove's own FAQ wording, still true as of the last check). Their docs even publish reference pages for `moove-send`/`moove-swap`/`moove-bridge`/`moove-stake`/`moove-ramp` — but each is explicitly marked not yet available; Send's page states outright: "There is no public API for Moove Send on moove.xyz today. No endpoints, no scopes, no agent."
+- No official SDK exists — Moove's own SDK docs page is blunt about it: "There is no moove.xyz SDK yet. No npm package, no PyPI package, no Go module. Anything published elsewhere claiming to be an official moove.xyz SDK is not ours." (Relay's `MooveClient` makes no such claim — it's "a" client, not "the" SDK.)
 - No documented webhook — settlement is confirmed via status polling, matching what this codebase does.
+- **List pagination is fixed at 10 items per page, newest first, and page size is not a request parameter** — confirmed from `docs.moove.xyz/api-reference/pagination`. `mockMooveServer.ts` matches this exactly (it originally didn't — hardcoded 20 and oldest-first — fixed after checking the real docs).
+- **The API is rate-limited per API key AND per source IP** (whichever is hit first), returning `429` with no `Retry-After` header — Moove's own guidance is to use exponential backoff with jitter. `mooveClient.ts` does not yet implement this backoff; it's a real gap worth closing before polling against the real API at any real frequency.
+- `toAmount` is quantized to the settlement token's decimals — a value with more precision than the token supports (e.g. a 7th decimal on 6-decimal USDC) is rejected with `422 INVALID_PAYMENT_LINK_AMOUNT`.
+- Deactivating a payment link is a dashboard-only action, not an API call — there's no programmatic way to cancel one once created.
 
 **This project's own design choices, not Moove instructions:**
 - Since there's no payee field to check for cross-resource replay protection, `mooveX402Middleware.ts` binds each created link to the resource path it was created for (`resourceId`/`req.path`) in its own in-memory map — this is Relay-side bookkeeping only, Moove never sees or verifies it.
