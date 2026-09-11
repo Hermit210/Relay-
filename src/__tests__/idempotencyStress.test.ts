@@ -4,6 +4,7 @@ import express from "express";
 import { createMockMooveServer } from "../sandbox/mockMooveServer";
 import { MooveClient } from "../sdk/mooveClient";
 import { mooveX402 } from "../x402/mooveX402Middleware";
+import { IdempotencyStore } from "../safety/idempotencyStore";
 
 const MOOVE_PORT = 4701;
 const RESOURCE_PORT = 4700;
@@ -57,5 +58,19 @@ describe("Idempotency under concurrent agent retries (stress test)", () => {
     );
     const linkIds = new Set(responses.map((r) => r.paymentLinkId));
     expect(linkIds.size).toBe(CONCURRENCY); // no cross-key collisions
+  });
+
+  it("IdempotencyStore.getOrCreate invokes the underlying create() exactly once under 100 concurrent callers", async () => {
+    const store = new IdempotencyStore<string>();
+    let createCalls = 0;
+    const create = async () => {
+      createCalls++;
+      await new Promise((r) => setTimeout(r, 20));
+      return "result-A";
+    };
+
+    const results = await Promise.all(Array.from({ length: 100 }, () => store.getOrCreate("same-key", create)));
+    expect(createCalls).toBe(1);
+    expect(results.every((r) => r === "result-A")).toBe(true);
   });
 });

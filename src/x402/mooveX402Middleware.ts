@@ -81,7 +81,7 @@ interface LinkContext {
  * flow. Mount this in front of any route an agent should pay to access.
  */
 export function mooveX402(config: MooveX402Config) {
-  const idempotency = new IdempotencyStore();
+  const idempotency = new IdempotencyStore<{ id: string; url: string }>();
   // Relay-side-only resource binding — see file header. Not sent to Moove.
   const linkContexts = new Map<string, LinkContext>();
 
@@ -120,36 +120,29 @@ export function mooveX402(config: MooveX402Config) {
     }
 
     // ---- Step 2: no payment yet — issue a 402 challenge ----
+    // getOrCreate collapses concurrent retries with the same Idempotency-Key
+    // into a single createPaymentLink call — see idempotencyStore.ts and
+    // src/__tests__/idempotencyStress.test.ts for why a plain
+    // check-then-create-then-remember sequence isn't safe under concurrency.
     const idempotencyKey = req.header("Idempotency-Key") ?? randomUUID();
-    const cachedLinkId = idempotency.check(idempotencyKey);
-
-    let linkId: string;
-    let payUrl: string;
-
-    if (cachedLinkId) {
-      linkId = cachedLinkId;
-      const existing = linkContexts.get(linkId);
-      payUrl = existing ? await config.client.getPaymentLink(linkId).then((l) => l.url) : "";
-    } else {
-      const created = await config.client.createPaymentLink({
+    const created = await idempotency.getOrCreate(idempotencyKey, async () => {
+      const link = await config.client.createPaymentLink({
         toAmount: challenge.amount,
         description: challenge.description,
         expirationDate: challenge.expiresInSeconds
           ? new Date(Date.now() + challenge.expiresInSeconds * 1000).toISOString()
           : undefined,
       });
-      idempotency.remember(idempotencyKey, created.id);
-      linkContexts.set(created.id, { amount: challenge.amount, resourceKey });
-      linkId = created.id;
-      payUrl = created.url;
-    }
+      linkContexts.set(link.id, { amount: challenge.amount, resourceKey });
+      return { id: link.id, url: link.url };
+    });
 
     return res.status(402).json({
       error: "payment_required",
-      paymentLinkId: linkId,
-      payUrl,
+      paymentLinkId: created.id,
+      payUrl: created.url,
       amount: challenge.amount,
-      instructions: `Pay ${payUrl} — the checkout page shows the exact chain/token to pay in — then retry this request with header '${PAYMENT_HEADER}: ${linkId}'.`,
+      instructions: `Pay ${created.url} — the checkout page shows the exact chain/token to pay in — then retry this request with header '${PAYMENT_HEADER}: ${created.id}'.`,
     });
   };
 }
