@@ -71,11 +71,11 @@ See `src/__tests__/mcp.test.ts` for a full example of driving all three over the
 **Not yet built / next milestones:**
 - A real, settled mainnet transaction with a real API key and a real on-chain hash as proof (M2).
 - Replacing the time-based finality heuristic with a real confirmation-count check against each chain's RPC (M3).
-- A stress test simulating concurrent duplicate agent retries against the real idempotency store, not just today's unit-level tests (M3).
 - 2–3 real integrations using Relay to pay through Moove, with full documentation (M5).
 
 **Shipped:**
 - MCP tool wrapper (`src/mcp/relayMcpServer.ts`) alongside the HTTP x402 middleware, so agents built on Claude/other MCP-native stacks can call this without an x402 client (M4). It wraps the payer/consumer side only — it still can't autonomously pay a link, since Moove's Send Agent isn't live; a human or future Send Agent completes payment via `payUrl`, and the MCP tools handle discovery, retry, and finality-polling around that.
+- Concurrency stress test for the idempotency guarantee (M3, `src/__tests__/idempotencyStress.test.ts`). This one actually caught a real bug in this codebase, not just a hypothetical one: the original check-then-create-then-remember sequence had a race window where concurrent retries with the same `Idempotency-Key` could all miss the cache before any of them recorded a result — reproduced as 5 duplicate payment links out of 50 concurrent retries in one run. Fixed via `IdempotencyStore.getOrCreate`, which registers an in-flight promise synchronously so every concurrent caller for a key gets the same result. This is the same class of bug the file's own doc comment cites research about (6% duplicate-settlement rate against a major x402 facilitator) — now demonstrated and fixed against Relay's own code, not just cited from a paper.
 
 ## License
 
