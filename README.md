@@ -18,7 +18,8 @@ Moove's own announcement says: *"Now your AI agents can move money for you... Ju
 | `src/safety/finalityChecker.ts` | Refuses to treat a payment as "done" the instant a hash appears — waits for the chain's real safe-finality window | Inspired by [Pratik Kale's Anvil](https://github.com/Pratikkale26) — prove correctness, don't just claim it |
 | `src/safety/idempotencyStore.ts` | Stops a retrying agent from accidentally double-paying | Inspired by Pratik Kale's DecentralWatch / Flowrge Gateway — proof-based tracking, replay protection |
 | `src/mcp/relayMcpServer.ts` | MCP tool wrapper (`relay_request_resource`, `relay_complete_payment`, `relay_check_payment_link`) so MCP-native agents (Claude, etc.) can consume a Relay-protected resource without a raw x402 HTTP client | Broadens "real users" (M4) beyond agents that already speak raw HTTP/x402 |
-| `src/demoDashboard.ts` | Browser-viewable, real-time visualization of the same flow (SSE, no build step/framework) | For reviewers (and yourself) to watch the system work, not just read logs |
+| `src/demoDashboard.ts` | Browser-viewable, real-time visualization of the same flow (SSE, no build step/framework) — also the data source for `frontend/` | For reviewers (and yourself) to watch the system work, not just read logs |
+| `frontend/` | A multi-page Vite + React + TypeScript presentation layer (Home, Live Demo, How It Works, Safety) over that same SSE stream | Presentation only — see "Frontend / visual demo" below |
 
 ## Getting started in 5 minutes
 
@@ -44,6 +45,17 @@ npm run demo:dashboard   # then open http://localhost:4002
 ```
 
 This starts the same sandbox + paid resource server as `demo:server`, on dedicated ports (4520/4521) so it can run standalone, and drives the same agent flow as `demo:agent` — through the real `mooveX402` middleware and `MooveClient`, nothing reimplemented — while streaming each step to the browser page over Server-Sent Events: the 402 challenge, settlement, a live countdown toward the chain's real safe-finality window (via `finalityChecker.ts`'s actual numbers), finality, the unlocked data, and the duplicate-protection check. Click "Run again" to replay it. This is a visualization on top of the real thing, not a scripted animation — see the honesty note at the top of `src/demoDashboard.ts` for the one deliberate liberty it takes (an agent-side sandbox peek used only to render the countdown bar; the actual unlock decision always comes from retrying the real protected endpoint).
+
+### Frontend / visual demo
+
+A proper multi-page frontend on top of `demoDashboard.ts`'s real event stream:
+
+```bash
+npm run demo:dashboard    # backend: sandbox + resource server + SSE (localhost:4002)
+npm run demo:frontend     # frontend: Vite dev server (localhost:5173) — run in a second terminal
+```
+
+Then open **http://localhost:5173**. Four pages: **Home** (overview), **Live Demo** (`/demo` — the animated, SSE-driven flow), **How It Works** (`/how-it-works` — a click-to-reveal architecture diagram), and **Safety** (`/safety` — the two safety layers explained). This is presentation only — it talks to the exact same backend and events as the plain dashboard above, and none of `src/sandbox/`, `src/sdk/`, `src/safety/`, `src/x402/`, or `src/mcp/` changed to build it. `demoDashboard.ts`'s own inline HTML page (`localhost:4002/`) still works too, kept as a lightweight fallback.
 
 ### Using it from an MCP-native agent (Claude, etc.)
 

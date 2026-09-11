@@ -9,7 +9,8 @@
     "demo:server": "tsx src/demo.ts",
     "demo:agent": "tsx src/demoAgent.ts",
     "mcp:server": "tsx src/mcp/relayMcpServer.ts",
-    "demo:dashboard": "tsx src/demoDashboard.ts"
+    "demo:dashboard": "tsx src/demoDashboard.ts",
+    "demo:frontend": "cd frontend && npm run dev"
   },
   "keywords": [],
   "author": "",

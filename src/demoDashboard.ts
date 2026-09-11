@@ -38,7 +38,7 @@ const RESOURCE_URL = `http://localhost:${RESOURCE_SERVER_PORT}/premium-market-da
 const sseClients = new Set<Response>();
 
 function broadcast(event: Record<string, unknown>) {
-  const payload = `data: ${JSON.stringify(event)}\n\n`;
+  const payload = `data: ${JSON.stringify({ ts: Date.now(), ...event })}\n\n`;
   for (const res of sseClients) res.write(payload);
 }
 
@@ -155,7 +155,15 @@ async function main() {
   resourceApp.listen(RESOURCE_SERVER_PORT);
 
   // 2. Dashboard: one static page + one SSE stream. No build step, no framework.
+  // CORS is open here because the frontend/ Vite dev server (a different
+  // origin/port) also consumes this same /events and /run — this is a local
+  // dev demo server, not a production API.
   const dashboardApp = express();
+  dashboardApp.use((_req: Request, res: Response, next) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "GET, POST");
+    next();
+  });
 
   dashboardApp.get("/", (_req: Request, res: Response) => {
     res.type("html").send(DASHBOARD_HTML);
