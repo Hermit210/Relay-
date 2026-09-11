@@ -10,7 +10,8 @@
     "demo:agent": "tsx src/demoAgent.ts",
     "mcp:server": "tsx src/mcp/relayMcpServer.ts",
     "demo:dashboard": "tsx src/demoDashboard.ts",
-    "demo:frontend": "cd frontend && npm run dev"
+    "demo:frontend": "cd frontend && npm run dev",
+    "verify:solana-rpc": "tsx src/verifySolanaRpc.ts"
   },
   "keywords": [],
   "author": "",

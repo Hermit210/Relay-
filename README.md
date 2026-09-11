@@ -17,6 +17,7 @@ Moove's own announcement says: *"Now your AI agents can move money for you... Ju
 | `src/x402/mooveX402Middleware.ts` | The core product — turns any Express route into one an AI agent can pay for via Moove, using the x402 `402 Payment Required` pattern | This is the actual deliverable |
 | `src/safety/finalityChecker.ts` | Refuses to treat a payment as "done" the instant a hash appears — waits for the chain's real safe-finality window | Inspired by [Pratik Kale's Anvil](https://github.com/Pratikkale26) — prove correctness, don't just claim it |
 | `src/safety/idempotencyStore.ts` | Stops a retrying agent from accidentally double-paying | Inspired by Pratik Kale's DecentralWatch / Flowrge Gateway — proof-based tracking, replay protection |
+| `src/safety/solanaFinalityChecker.ts` | A REAL confirmation-depth check against live Solana RPC (not a heuristic) — verified working against mainnet in `src/verifySolanaRpc.ts` | M3's "replace the heuristic with a real RPC check" — see honesty notes for why it isn't wired into the main flow yet |
 | `src/mcp/relayMcpServer.ts` | MCP tool wrapper (`relay_request_resource`, `relay_complete_payment`, `relay_check_payment_link`) so MCP-native agents (Claude, etc.) can consume a Relay-protected resource without a raw x402 HTTP client | Broadens "real users" (M4) beyond agents that already speak raw HTTP/x402 |
 | `src/demoDashboard.ts` | Browser-viewable, real-time visualization of the same flow (SSE, no build step/framework) — also the data source for `frontend/` | For reviewers (and yourself) to watch the system work, not just read logs |
 | `frontend/` | A multi-page Vite + React + TypeScript presentation layer (Home, Live Demo, How It Works, Safety) over that same SSE stream | Presentation only — see "Frontend / visual demo" below |
@@ -25,7 +26,7 @@ Moove's own announcement says: *"Now your AI agents can move money for you... Ju
 
 ```bash
 npm install
-npm test               # 21 automated tests, all passing
+npm test               # 27 automated tests, all passing
 npm run build           # tsc — should complete with no errors
 npm run demo:server     # starts the sandbox Moove API (port 4501) + a paid demo route (port 4500)
 # in a second terminal:
@@ -70,6 +71,22 @@ Point an MCP client (e.g. Claude Desktop's config, or any MCP SDK client) at tha
 
 See `src/__tests__/mcp.test.ts` for a full example of driving all three over the real MCP protocol (via `InMemoryTransport`, not a mocked call).
 
+### Real RPC-based finality (M3)
+
+```bash
+npm run verify:solana-rpc
+```
+
+Runs a real, non-mocked check against live Solana mainnet: fetches a real, current transaction signature (from a permanently high-traffic account, so it's never stale), then asks Solana's own RPC whether it's `finalized` — Solana's own definition of irreversible, not a Relay heuristic. Sample output from an actual run:
+
+```
+[verify] Got real signature: 4KFPBpJN1hRmgjFWX99xfNSjB4SL9xnWfCduwJkinhU55zAYJCYtKYbY163R1TCuyF7vXtZVmgVzUeDs35PLFEEZ
+[verify] Status: finalized (confirmed=true)
+[verify] SUCCESS — real mainnet signature ... confirmed finalized via a real RPC round trip.
+```
+
+This is real and working, but **not yet wired into the main payment flow** — see honesty notes below for exactly why (Moove's confirmed schema doesn't expose a raw transaction signature, only an unconfirmed-format `transactionUrl`). `finalityChecker.ts`'s time-based heuristic remains the default for now. `src/safety/solanaFinalityChecker.test.ts` covers the parsing logic offline (mocked, part of `npm test`); `verify:solana-rpc` is the separate, manual, real-network proof — same role `demo.ts`/`demoAgent.ts` play for the rest of this project.
+
 ## Honesty notes — what's confirmed vs. what's this project's own design
 
 **Confirmed directly from Moove's real docs and OpenAPI spec (verified 2026-09-11, re-checked against `https://api.moove.xyz/openapi.json` and `docs.moove.xyz`):**
@@ -95,12 +112,13 @@ See `src/__tests__/mcp.test.ts` for a full example of driving all three over the
 
 **Not yet built / next milestones:**
 - A real, settled mainnet transaction with a real API key and a real on-chain hash as proof (M2).
-- Replacing the time-based finality heuristic with a real confirmation-count check against each chain's RPC (M3).
+- Wiring `solanaFinalityChecker.ts`'s real RPC-based check into the main payment flow — blocked on Moove exposing (or confirming the format of) a real transaction signature, not on anything left to build on Relay's side (M3, remaining half — see below).
 - 2–3 real integrations using Relay to pay through Moove, with full documentation (M5).
 
 **Shipped:**
 - MCP tool wrapper (`src/mcp/relayMcpServer.ts`) alongside the HTTP x402 middleware, so agents built on Claude/other MCP-native stacks can call this without an x402 client (M4). It wraps the payer/consumer side only — it still can't autonomously pay a link, since Moove's Send Agent isn't live; a human or future Send Agent completes payment via `payUrl`, and the MCP tools handle discovery, retry, and finality-polling around that.
 - Concurrency stress test for the idempotency guarantee (M3, `src/__tests__/idempotencyStress.test.ts`). This one actually caught a real bug in this codebase, not just a hypothetical one: the original check-then-create-then-remember sequence had a race window where concurrent retries with the same `Idempotency-Key` could all miss the cache before any of them recorded a result — reproduced as 5 duplicate payment links out of 50 concurrent retries in one run. Fixed via `IdempotencyStore.getOrCreate`, which registers an in-flight promise synchronously so every concurrent caller for a key gets the same result. This is the same class of bug the file's own doc comment cites research about (6% duplicate-settlement rate against a major x402 facilitator) — now demonstrated and fixed against Relay's own code, not just cited from a paper.
+- Real RPC-based finality checking for Solana (M3, `src/safety/solanaFinalityChecker.ts`), verified against live mainnet (`npm run verify:solana-rpc`) — not a mock, not a testnet faucet. Deliberately shipped as a standalone, tested, ready-to-wire module rather than force-fit into the main flow, since Moove's confirmed schema doesn't currently expose the raw signature it needs — see the honesty notes above and the file's own doc comment.
 
 ## License
 
