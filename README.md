@@ -18,6 +18,7 @@ Moove's own announcement says: *"Now your AI agents can move money for you... Ju
 | `src/safety/finalityChecker.ts` | Refuses to treat a payment as "done" the instant a hash appears — waits for the chain's real safe-finality window | Inspired by [Pratik Kale's Anvil](https://github.com/Pratikkale26) — prove correctness, don't just claim it |
 | `src/safety/idempotencyStore.ts` | Stops a retrying agent from accidentally double-paying | Inspired by Pratik Kale's DecentralWatch / Flowrge Gateway — proof-based tracking, replay protection |
 | `src/mcp/relayMcpServer.ts` | MCP tool wrapper (`relay_request_resource`, `relay_complete_payment`, `relay_check_payment_link`) so MCP-native agents (Claude, etc.) can consume a Relay-protected resource without a raw x402 HTTP client | Broadens "real users" (M4) beyond agents that already speak raw HTTP/x402 |
+| `src/demoDashboard.ts` | Browser-viewable, real-time visualization of the same flow (SSE, no build step/framework) | For reviewers (and yourself) to watch the system work, not just read logs |
 
 ## Getting started in 5 minutes
 
@@ -35,6 +36,14 @@ You should see the agent get a `402`, "pay" the sandbox link (auto-settles after
 To point Relay at the real API instead of the sandbox: get an API key from [moove.xyz/dashboard/api-keys](https://www.moove.xyz/dashboard/api-keys) (scoped to the Moove Receive Agent), then construct the client as `new MooveClient({ baseUrl: "https://api.moove.xyz", apiKey: "mk_live_..." })`. Nothing else in the codebase changes — every module talks to the `MooveClient`/`MoovePaymentLink` interface, not to raw HTTP shape.
 
 The demo agent has **zero payment logic hardcoded** beyond "read the 402 challenge and retry with the header it asks for" — everything else (creating the Moove link, waiting for settlement, verifying finality, preventing double-charge) happens inside Relay.
+
+### Watch it run in your browser
+
+```bash
+npm run demo:dashboard   # then open http://localhost:4002
+```
+
+This starts the same sandbox + paid resource server as `demo:server`, on dedicated ports (4520/4521) so it can run standalone, and drives the same agent flow as `demo:agent` — through the real `mooveX402` middleware and `MooveClient`, nothing reimplemented — while streaming each step to the browser page over Server-Sent Events: the 402 challenge, settlement, a live countdown toward the chain's real safe-finality window (via `finalityChecker.ts`'s actual numbers), finality, the unlocked data, and the duplicate-protection check. Click "Run again" to replay it. This is a visualization on top of the real thing, not a scripted animation — see the honesty note at the top of `src/demoDashboard.ts` for the one deliberate liberty it takes (an agent-side sandbox peek used only to render the countdown bar; the actual unlock decision always comes from retrying the real protected endpoint).
 
 ### Using it from an MCP-native agent (Claude, etc.)
 

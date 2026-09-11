@@ -8,7 +8,8 @@
     "test": "vitest run",
     "demo:server": "tsx src/demo.ts",
     "demo:agent": "tsx src/demoAgent.ts",
-    "mcp:server": "tsx src/mcp/relayMcpServer.ts"
+    "mcp:server": "tsx src/mcp/relayMcpServer.ts",
+    "demo:dashboard": "tsx src/demoDashboard.ts"
   },
   "keywords": [],
   "author": "",
